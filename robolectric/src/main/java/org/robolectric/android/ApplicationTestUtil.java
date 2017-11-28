@@ -8,7 +8,10 @@ public class ApplicationTestUtil {
 
   /**
    * Creates a new {@link Application} and attaches it with a base context obtained from context.
+   *
+   * @deprecated
    */
+  @Deprecated
   public static <T extends Application> T buildApplication(Class<T> applicationClass, Context context) {
     T application = newApplication(applicationClass);
     attach(application, context);

@@ -10,56 +10,41 @@ import org.robolectric.manifest.AndroidManifest;
 public class DefaultTestLifecycle implements TestLifecycle {
 
   /**
-   * Override this method if you want to provide your own implementation of Application.
-   *
-   * This method attempts to instantiate an application instance as follows:-
-   *
-   * 1. If specified loads the application specified in the Config annotation
-   * 1. Attempt to load a test application as documented <a href="http://robolectric.blogspot.com/2013/04/the-test-lifecycle-in-20.html">here</a>
-   * 1. Use the application as specified in the AndroidManifest.xml
-   * 1. Instantiate a standard {@link android.app.Application}
-   *
-   * @param method The currently-running test method.
-   * @param appManifest The application manifest.
-   * @param config The configuration annotation from the test if present.
-   * @return An instance of the Application class specified by the ApplicationManifest.xml or an instance of
-   *         Application if not specified.
+   * {@inheritDoc}
    */
-  @Override public Application createApplication(Method method, AndroidManifest appManifest, Config config) {
-
-    Application application = null;
-    if (config != null && !Config.Builder.isDefaultApplication(config.application())) {
-      if (config.application().getCanonicalName() != null) {
-        Class<? extends Application> applicationClass;
-        try {
-          applicationClass = new ClassNameResolver<Application>(null, config.application().getName()).resolve();
-        } catch (ClassNotFoundException e) {
-          throw new RuntimeException(e);
-        }
-        application = ApplicationTestUtil.newApplication(applicationClass);
+  @Override
+  public Class<? extends Application> determineApplicationClass(Method method,
+      AndroidManifest appManifest, Config config) {
+    if (config != null && !Config.Builder.isDefaultApplication(config.application())
+        && config.application().getCanonicalName() != null) {
+      try {
+        return resolve(null, config.application().getName());
+      } catch (ClassNotFoundException e) {
+        throw new RuntimeException(e);
       }
     } else if (appManifest != null && appManifest.getApplicationName() != null) {
-      Class<? extends Application> applicationClass = null;
+      String packageName = appManifest.getPackageName();
+      String applicationName = appManifest.getApplicationName();
+
       try {
-        applicationClass = new ClassNameResolver<Application>(appManifest.getPackageName(), getTestApplicationName(appManifest.getApplicationName())).resolve();
+        return resolve(packageName, getTestApplicationName(applicationName));
       } catch (ClassNotFoundException e) {
         // no problem
       }
 
-      if (applicationClass == null) {
-        try {
-          applicationClass = new ClassNameResolver<Application>(appManifest.getPackageName(), appManifest.getApplicationName()).resolve();
-        } catch (ClassNotFoundException e) {
-          throw new RuntimeException(e);
-        }
+      try {
+        return resolve(packageName, applicationName);
+      } catch (ClassNotFoundException e) {
+        throw new RuntimeException(e);
       }
-
-      application = ApplicationTestUtil.newApplication(applicationClass);
     } else {
-      application = new Application();
+      return Application.class;
     }
+  }
 
-    return application;
+  private static Class<? extends Application> resolve(String packageName, String applicationName)
+      throws ClassNotFoundException {
+    return (Class<? extends Application>) ClassNameResolver.resolve(packageName, applicationName);
   }
 
   /**
@@ -90,6 +75,10 @@ public class DefaultTestLifecycle implements TestLifecycle {
     }
   }
 
+  /**
+   * @deprecated Do not use.
+   */
+  @Deprecated
   public String getTestApplicationName(String applicationName) {
     int lastDot = applicationName.lastIndexOf('.');
     if (lastDot > -1) {
