@@ -5,6 +5,11 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Collects performance statistics for later reporting via {@link PerfStatsReporter}.
+ *
+ * @since 3.6
+ */
 public class PerfStatsCollector {
 
   private static final PerfStatsCollector INSTANCE = new PerfStatsCollector();
@@ -12,6 +17,7 @@ public class PerfStatsCollector {
   private final Clock clock;
   private final Map<Class, Object> metadata = new HashMap<>();
   private final Map<MetricKey, Metric> metricMap = new HashMap<>();
+  private boolean enabled = true;
 
   public PerfStatsCollector() {
     this(System::nanoTime);
@@ -25,11 +31,19 @@ public class PerfStatsCollector {
     return INSTANCE;
   }
 
+  /**
+   * If not enabled, don't bother retaining perf stats, saving some memory and CPU cycles.
+   */
+  public void setEnabled(boolean isEnabled) {
+    this.enabled = isEnabled;
+  }
+
   public Event startEvent(String eventName) {
     return new Event(eventName);
   }
 
-  public <T, E extends Exception> T measure(String eventName, ThrowingSupplier<T, E> supplier) throws E {
+  public <T, E extends Exception> T measure(String eventName, ThrowingSupplier<T, E> supplier)
+      throws E {
     boolean success = true;
     Event event = startEvent(eventName);
     try {
@@ -47,7 +61,8 @@ public class PerfStatsCollector {
     T get() throws F;
   }
 
-  public <E extends Exception> void measure(String eventName, ThrowingRunnable<E> runnable) throws E {
+  public <E extends Exception> void measure(String eventName, ThrowingRunnable<E> runnable)
+      throws E {
     boolean success = true;
     Event event = startEvent(eventName);
     try {
@@ -70,6 +85,10 @@ public class PerfStatsCollector {
   }
 
   public synchronized <T> void putMetadata(Class<T> metadataClass, T metadata) {
+    if (!enabled) {
+      return;
+    }
+
     this.metadata.put(metadataClass, metadata);
   }
 
@@ -96,6 +115,10 @@ public class PerfStatsCollector {
     }
 
     public void finished(boolean success) {
+      if (!enabled) {
+        return;
+      }
+
       synchronized (PerfStatsCollector.this) {
         MetricKey key = new MetricKey(name, success);
         Metric metric = metricMap.computeIfAbsent(key, k -> new Metric(k.name, k.success));
@@ -218,7 +241,7 @@ public class PerfStatsCollector {
   public static class Metadata {
     private final Map<Class, Object> metadata;
 
-    public Metadata(Map<Class, Object> metadata) {
+    Metadata(Map<Class, Object> metadata) {
       this.metadata = new HashMap<>(metadata);
     }
 

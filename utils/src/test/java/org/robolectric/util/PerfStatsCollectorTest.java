@@ -116,7 +116,7 @@ public class PerfStatsCollectorTest {
     assertThat(collector.getMetrics()).isEmpty();
   }
 
-  private class FakeClock implements Clock {
+  private static class FakeClock implements Clock {
 
     private int timeNs = 0;
 

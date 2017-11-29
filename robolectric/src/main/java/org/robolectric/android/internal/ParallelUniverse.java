@@ -1,7 +1,5 @@
 package org.robolectric.android.internal;
 
-import static org.robolectric.util.ReflectionHelpers.ClassParameter;
-
 import android.app.ActivityThread;
 import android.app.Application;
 import android.app.LoadedApk;
@@ -34,6 +32,7 @@ import org.robolectric.res.ResourceTable;
 import org.robolectric.shadows.ShadowLooper;
 import org.robolectric.util.PerfStatsCollector;
 import org.robolectric.util.ReflectionHelpers;
+import org.robolectric.util.ReflectionHelpers.ClassParameter;
 import org.robolectric.util.Scheduler;
 import org.robolectric.util.TempDirectory;
 

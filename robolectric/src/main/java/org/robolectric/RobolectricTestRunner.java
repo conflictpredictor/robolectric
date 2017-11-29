@@ -60,7 +60,6 @@ import org.robolectric.res.ResourceTableFactory;
 import org.robolectric.res.RoutingResourceTable;
 import org.robolectric.util.Logger;
 import org.robolectric.util.PerfStatsCollector;
-import org.robolectric.util.PerfStatsCollector.ThrowingSupplier;
 import org.robolectric.util.ReflectionHelpers;
 
 /**
