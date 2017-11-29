@@ -32,6 +32,7 @@ import org.robolectric.manifest.AndroidManifest;
 import org.robolectric.manifest.RoboNotFoundException;
 import org.robolectric.res.ResourceTable;
 import org.robolectric.shadows.ShadowLooper;
+import org.robolectric.util.PerfStatsCollector;
 import org.robolectric.util.ReflectionHelpers;
 import org.robolectric.util.Scheduler;
 import org.robolectric.util.TempDirectory;
@@ -152,7 +153,9 @@ public class ParallelUniverse implements ParallelUniverseInterface {
 
       appResources.updateConfiguration(configuration, displayMetrics);
 
-      application.onCreate();
+      PerfStatsCollector.getInstance().measure("application onCreate()", () -> {
+        application.onCreate();
+      });
     }
   }
 

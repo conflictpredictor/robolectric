@@ -7,64 +7,135 @@ import java.util.Map;
 
 public class PerfStatsCollector {
 
-  private final String description;
-  private final Clock clock;
-  private final Map<String, Metric> metricMap = new HashMap<>();
+  private static final PerfStatsCollector INSTANCE = new PerfStatsCollector();
 
-  public PerfStatsCollector(String description) {
-    this(description, System::currentTimeMillis);
+  private final Clock clock;
+  private final Map<Class, Object> metadata = new HashMap<>();
+  private final Map<MetricKey, Metric> metricMap = new HashMap<>();
+
+  public PerfStatsCollector() {
+    this(System::nanoTime);
   }
 
-  PerfStatsCollector(String description, Clock clock) {
-    this.description = description;
+  PerfStatsCollector(Clock clock) {
     this.clock = clock;
   }
 
-  public synchronized Event startEvent(String eventName) {
-    Metric metric = metricMap.computeIfAbsent(eventName, Metric::new);
-    return new Event(metric);
+  public static PerfStatsCollector getInstance() {
+    return INSTANCE;
   }
 
-  public Collection<Metric> getMetrics() {
-    return metricMap.values();
+  public Event startEvent(String eventName) {
+    return new Event(eventName);
   }
 
-  public String getDescription() {
-    return description;
+  public <T, E extends Exception> T measure(String eventName, ThrowingSupplier<T, E> supplier) throws E {
+    boolean success = true;
+    Event event = startEvent(eventName);
+    try {
+      return supplier.get();
+    } catch (Exception e) {
+      success = false;
+      throw e;
+    } finally {
+      event.finished(success);
+    }
+  }
+
+  @FunctionalInterface
+  public interface ThrowingSupplier<T, F extends Exception> {
+    T get() throws F;
+  }
+
+  public <E extends Exception> void measure(String eventName, ThrowingRunnable<E> runnable) throws E {
+    boolean success = true;
+    Event event = startEvent(eventName);
+    try {
+      runnable.run();
+    } catch (Exception e) {
+      success = false;
+      throw e;
+    } finally {
+      event.finished(success);
+    }
+  }
+
+  @FunctionalInterface
+  public interface ThrowingRunnable<F extends Exception> {
+    void run() throws F;
+  }
+
+  public synchronized Collection<Metric> getMetrics() {
+    return new ArrayList<>(metricMap.values());
+  }
+
+  public synchronized <T> void putMetadata(Class<T> metadataClass, T metadata) {
+    this.metadata.put(metadataClass, metadata);
+  }
+
+  public synchronized Metadata getMetadata() {
+    return new Metadata(metadata);
+  }
+
+  public void reset() {
+    metadata.clear();
+    metricMap.clear();
   }
 
   public class Event {
-    private final Metric metric;
-    private final long startTimeMs;
+    private final String name;
+    private final long startTimeNs;
 
-    Event(Metric metric) {
-      this.metric = metric;
-      this.startTimeMs = clock.currentTimeMillis();
+    Event(String name) {
+      this.name = name;
+      this.startTimeNs = clock.nanoTime();
     }
 
     public void finished() {
-      this.metric.count++;
-      this.metric.elapsedMs += (clock.currentTimeMillis() - startTimeMs);
+      finished(true);
+    }
+
+    public void finished(boolean success) {
+      synchronized (PerfStatsCollector.this) {
+        MetricKey key = new MetricKey(name, success);
+        Metric metric = metricMap.computeIfAbsent(key, k -> new Metric(k.name, k.success));
+        metric.count++;
+        metric.elapsedNs += clock.nanoTime() - startTimeNs;
+      }
     }
   }
 
   public static class Metric {
     private final String name;
-    private volatile int count;
-    private volatile int elapsedMs;
+    private int count;
+    private long elapsedNs;
+    private final boolean success;
 
-    Metric(String name, int count, int elapsedMs) {
+    public Metric(String name, int count, int elapsedNs, boolean success) {
       this.name = name;
       this.count = count;
-      this.elapsedMs = elapsedMs;
+      this.elapsedNs = elapsedNs;
+      this.success = success;
     }
 
-    Metric(String name) {
-      this(name, 0, 0);
+    public Metric(String name, boolean success) {
+      this(name, 0, 0, success);
     }
 
     public String getName() {
       return name;
+    }
+
+    public int getCount() {
+      return count;
+    }
+
+    public long getElapsedNs() {
+      return elapsedNs;
+    }
+
+    public boolean isSuccess() {
+      return success;
     }
 
     @Override
@@ -81,8 +152,10 @@ public class PerfStatsCollector {
       if (count != metric.count) {
         return false;
       }
-
-      if (elapsedMs != metric.elapsedMs) {
+      if (elapsedNs != metric.elapsedNs) {
+        return false;
+      }
+      if (success != metric.success) {
         return false;
       }
       return name != null ? name.equals(metric.name) : metric.name == null;
@@ -92,7 +165,8 @@ public class PerfStatsCollector {
     public int hashCode() {
       int result = name != null ? name.hashCode() : 0;
       result = 31 * result + count;
-      result = 31 * result + elapsedMs;
+      result = 31 * result + (int) (elapsedNs ^ (elapsedNs >>> 32));
+      result = 31 * result + (success ? 1 : 0);
       return result;
     }
 
@@ -101,8 +175,55 @@ public class PerfStatsCollector {
       return "Metric{" +
           "name='" + name + '\'' +
           ", count=" + count +
-          ", elapsedMs=" + elapsedMs +
+          ", elapsedNs=" + elapsedNs +
+          ", success=" + success +
           '}';
+    }
+  }
+
+  private static class MetricKey {
+    private final String name;
+    private final boolean success;
+
+    MetricKey(String name, boolean success) {
+      this.name = name;
+      this.success = success;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+
+      MetricKey metricKey = (MetricKey) o;
+
+      if (success != metricKey.success) {
+        return false;
+      }
+      return name != null ? name.equals(metricKey.name) : metricKey.name == null;
+    }
+
+    @Override
+    public int hashCode() {
+      int result = name != null ? name.hashCode() : 0;
+      result = 31 * result + (success ? 1 : 0);
+      return result;
+    }
+  }
+
+  public static class Metadata {
+    private final Map<Class, Object> metadata;
+
+    public Metadata(Map<Class, Object> metadata) {
+      this.metadata = new HashMap<>(metadata);
+    }
+
+    public <T> T get(Class<T> metadataClass) {
+      return (T) metadata.get(metadataClass);
     }
   }
 }
