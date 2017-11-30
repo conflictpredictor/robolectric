@@ -31,8 +31,13 @@ public class Qualifiers {
   private final ResTable_config config;
 
   public static Qualifiers parse(String qualifiers) {
+    return parse(qualifiers, true);
+  }
+
+  public static Qualifiers parse(String qualifiers, boolean applyVersionForCompat) {
     final ResTable_config config = new ResTable_config();
-    if (!qualifiers.isEmpty() && !new ConfigDescription().parse(qualifiers, config)) {
+    if (!qualifiers.isEmpty()
+        && !ConfigDescription.parse(qualifiers, config, applyVersionForCompat)) {
       throw new IllegalArgumentException("failed to parse qualifiers '" + qualifiers + "'");
     }
 
